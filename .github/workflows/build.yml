@@ -1,45 +1,61 @@
-name: Build APK from ZIP
+name: Fix and Build APK
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch:
+  workflow_dispatch: # This adds a manual "Run" button
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Check out the code (Download the ZIP to the server)
-      - uses: actions/checkout@v3
+    # 1. Download the ZIP file from your Repo
+    - uses: actions/checkout@v3
 
-      # 2. Set up Java (Required to build Android apps)
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
+    # 2. Set up Java 17
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
 
-      # 3. Unzip the file and move contents to the main folder
-      - name: Unzip and Prepare
-        run: |
-          unzip *.zip -d temp_folder
-          # Move files out of the folder structure so Gradle can find them
-          mv temp_folder/*/* . || mv temp_folder/* . 
-          rm -rf temp_folder
-          rm *.zip
+    # 3. SMARTER UNZIP (Finds the project automatically)
+    - name: Unzip and Find Project Root
+      run: |
+        # Unzip to a temporary folder
+        unzip -q *.zip -d temp_extract
+        
+        # Find the file named 'gradlew' (it marks the root of the app)
+        GRADLE_LOCATION=$(find temp_extract -name gradlew | head -n 1)
+        
+        if [ -z "$GRADLE_LOCATION" ]; then
+          echo "ERROR: Could not find gradlew inside the zip!"
+          exit 1
+        fi
+        
+        # Get the folder containing gradlew
+        PROJECT_ROOT=$(dirname "$GRADLE_LOCATION")
+        
+        echo "Found project at: $PROJECT_ROOT"
+        
+        # Move everything to the main folder
+        cp -r "$PROJECT_ROOT"/* .
+        cp -r "$PROJECT_ROOT"/.* . 2>/dev/null || true
+        
+        # Clean up
+        rm -rf temp_extract
 
-      # 4. Make the build script executable
-      - name: Grant Execute Permission
-        run: chmod +x gradlew
+    # 4. Give permission to the builder script
+    - name: Make Gradle Executable
+      run: chmod +x gradlew
 
-      # 5. Build the APK (Debug version)
-      - name: Build with Gradle
-        run: ./gradlew assembleDebug --stacktrace
+    # 5. Build the APK
+    - name: Build with Gradle
+      run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      # 6. Upload the APK so you can download it
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: install-me-app
-          path: app/build/outputs/apk/debug/app-debug.apk
+    # 6. Upload the Result
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: my-fixed-app
+        path: app/build/outputs/apk/debug/app-debug.apk
