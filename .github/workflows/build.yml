@@ -1,61 +1,47 @@
-name: Fix and Build APK
+name: Build with Global Gradle
 
 on:
   push:
-  workflow_dispatch: # This adds a manual "Run" button
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Download the ZIP file from your Repo
+    # 1. Download the ZIP from your repo
     - uses: actions/checkout@v3
 
-    # 2. Set up Java 17
+    # 2. Set up Java 17 (Required for Android)
     - name: Set up JDK 17
       uses: actions/setup-java@v3
       with:
         java-version: '17'
         distribution: 'temurin'
 
-    # 3. SMARTER UNZIP (Finds the project automatically)
-    - name: Unzip and Find Project Root
+    # 3. Unzip the file
+    - name: Unzip Project
       run: |
-        # Unzip to a temporary folder
-        unzip -q *.zip -d temp_extract
+        unzip -q *.zip
         
-        # Find the file named 'gradlew' (it marks the root of the app)
-        GRADLE_LOCATION=$(find temp_extract -name gradlew | head -n 1)
-        
-        if [ -z "$GRADLE_LOCATION" ]; then
-          echo "ERROR: Could not find gradlew inside the zip!"
-          exit 1
+        # If the zip created a subfolder, move files up to the main folder
+        # This finds where 'build.gradle' is and moves everything there to the root
+        ROOT_DIR=$(find . -name build.gradle | head -n 1 | xargs dirname)
+        if [ "$ROOT_DIR" != "." ]; then
+          cp -r $ROOT_DIR/* .
+          cp -r $ROOT_DIR/.* . 2>/dev/null || true
         fi
         
-        # Get the folder containing gradlew
-        PROJECT_ROOT=$(dirname "$GRADLE_LOCATION")
-        
-        echo "Found project at: $PROJECT_ROOT"
-        
-        # Move everything to the main folder
-        cp -r "$PROJECT_ROOT"/* .
-        cp -r "$PROJECT_ROOT"/.* . 2>/dev/null || true
-        
-        # Clean up
-        rm -rf temp_extract
+        echo "Project extracted. Ready to build."
 
-    # 4. Give permission to the builder script
-    - name: Make Gradle Executable
-      run: chmod +x gradlew
+    # 4. BUILD COMMAND (Modified)
+    # We use 'gradle' (Global) instead of './gradlew' (Local/Missing)
+    - name: Build APK
+      run: gradle assembleDebug --no-daemon --stacktrace
 
-    # 5. Build the APK
-    - name: Build with Gradle
-      run: ./gradlew assembleDebug --no-daemon --stacktrace
-
-    # 6. Upload the Result
-    - name: Upload APK
+    # 5. Upload the APK
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: my-fixed-app
+        name: my-app-apk
         path: app/build/outputs/apk/debug/app-debug.apk
