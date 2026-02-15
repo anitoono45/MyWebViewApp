@@ -1,0 +1,45 @@
+name: Build APK from ZIP
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out the code (Download the ZIP to the server)
+      - uses: actions/checkout@v3
+
+      # 2. Set up Java (Required to build Android apps)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # 3. Unzip the file and move contents to the main folder
+      - name: Unzip and Prepare
+        run: |
+          unzip *.zip -d temp_folder
+          # Move files out of the folder structure so Gradle can find them
+          mv temp_folder/*/* . || mv temp_folder/* . 
+          rm -rf temp_folder
+          rm *.zip
+
+      # 4. Make the build script executable
+      - name: Grant Execute Permission
+        run: chmod +x gradlew
+
+      # 5. Build the APK (Debug version)
+      - name: Build with Gradle
+        run: ./gradlew assembleDebug --stacktrace
+
+      # 6. Upload the APK so you can download it
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-me-app
+          path: app/build/outputs/apk/debug/app-debug.apk
